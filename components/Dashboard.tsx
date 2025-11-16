@@ -1,10 +1,11 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { subscribeToManholeUpdates, setLockState } from '../services/manholeService';
 import type { ManholeData } from '../types';
 import SensorCard from './SensorCard';
 import LockControl from './LockControl';
 import HistoryChart from './HistoryChart';
+import ManholeStatusCard from './ManholeStatusCard';
+import RawDataCard from './RawDataCard';
 import { GasIcon } from './icons/GasIcon';
 import { WaterIcon } from './icons/WaterIcon';
 import { BackIcon } from './icons/BackIcon';
@@ -12,6 +13,7 @@ import { LogoutIcon } from './icons/LogoutIcon';
 
 interface DashboardProps {
   manholeId: string;
+  manholeName: string;
   onBack: () => void;
   onLogout: () => void;
 }
@@ -22,14 +24,14 @@ const getGasStatus = (value: number): 'normal' | 'warning' | 'danger' => {
   return 'normal';
 };
 
-// Assuming 200cm is empty, 10cm is almost full
+// Assuming 200cm is empty, a smaller number is more full/blocked
 const getBlockageStatus = (value: number): 'normal' | 'warning' | 'danger' => {
-  if (value < 50) return 'danger';
-  if (value < 100) return 'warning';
+  if (value <= 40) return 'danger';
+  if (value <= 70) return 'warning';
   return 'normal';
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ manholeId, onBack, onLogout }) => {
+const Dashboard: React.FC<DashboardProps> = ({ manholeId, manholeName, onBack, onLogout }) => {
   const [data, setData] = useState<ManholeData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,7 +57,7 @@ const Dashboard: React.FC<DashboardProps> = ({ manholeId, onBack, onLogout }) =>
   if (isLoading || !data) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl text-cyan-400">Connecting to Manhole {manholeId}...</div>
+        <div className="text-xl text-cyan-400">Connecting to Manhole {manholeName}...</div>
       </div>
     );
   }
@@ -67,7 +69,7 @@ const Dashboard: React.FC<DashboardProps> = ({ manholeId, onBack, onLogout }) =>
           <button onClick={onBack} className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors">
             <BackIcon className="w-6 h-6"/>
           </button>
-          <h1 className="text-3xl font-bold text-white">Dashboard: <span className="text-cyan-400">{manholeId}</span></h1>
+          <h1 className="text-3xl font-bold text-white">Dashboard: <span className="text-cyan-400">{manholeName}</span></h1>
         </div>
         <button onClick={onLogout} className="flex items-center gap-2 p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm font-medium">
           <LogoutIcon className="w-5 h-5"/>
@@ -92,10 +94,12 @@ const Dashboard: React.FC<DashboardProps> = ({ manholeId, onBack, onLogout }) =>
             icon={<WaterIcon className="w-8 h-8"/>}
             status={getBlockageStatus(data.blockageDistance)}
           />
+          <ManholeStatusCard status={data.manholeStatus} />
           <LockControl
             isLocked={data.isLocked}
             onToggle={handleToggleLock}
           />
+           <RawDataCard data={data} />
         </div>
 
         {/* History Chart */}

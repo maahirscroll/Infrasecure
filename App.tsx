@@ -1,54 +1,59 @@
-
-import React, { useState, useCallback } from 'react';
-import type { User } from './types';
+import React, { useState, useCallback, useEffect } from 'react';
+import { auth } from './services/firebase';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import LoginScreen from './components/LoginScreen';
 import ManholeSelector from './components/ManholeSelector';
 import Dashboard from './components/Dashboard';
 
-type View = 'login' | 'selector' | 'dashboard';
-
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<View>('login');
-  const [user, setUser] = useState<User | null>(null);
+  const [authUser, setAuthUser] = useState<FirebaseUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [selectedManholeId, setSelectedManholeId] = useState<string | null>(null);
+  const [selectedManholeName, setSelectedManholeName] = useState<string | null>(null);
 
-  const handleLogin = useCallback((loggedInUser: User) => {
-    setUser(loggedInUser);
-    setCurrentView('selector');
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+      setAuthLoading(false);
+      if (!user) {
+        setSelectedManholeId(null);
+        setSelectedManholeName(null);
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
-  const handleSelectManhole = useCallback((manholeId: string) => {
+
+  const handleSelectManhole = useCallback((manholeId: string, name: string) => {
     setSelectedManholeId(manholeId);
-    setCurrentView('dashboard');
+    setSelectedManholeName(name);
   }, []);
 
   const handleLogout = useCallback(() => {
-    setUser(null);
-    setSelectedManholeId(null);
-    setCurrentView('login');
+    auth.signOut();
   }, []);
 
   const handleBackToSelector = useCallback(() => {
     setSelectedManholeId(null);
-    setCurrentView('selector');
+    setSelectedManholeName(null);
   }, []);
+  
+  if (authLoading) {
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-gray-900 text-cyan-400 text-xl">
+            Authenticating...
+        </div>
+    );
+  }
 
   const renderContent = () => {
-    switch (currentView) {
-      case 'login':
-        return <LoginScreen onLogin={handleLogin} />;
-      case 'selector':
-        return <ManholeSelector onSelectManhole={handleSelectManhole} onLogout={handleLogout} />;
-      case 'dashboard':
-        if (selectedManholeId) {
-          return <Dashboard manholeId={selectedManholeId} onBack={handleBackToSelector} onLogout={handleLogout} />;
-        }
-        // Fallback if ID is somehow null
-        setCurrentView('selector');
-        return null;
-      default:
-        return <LoginScreen onLogin={handleLogin} />;
+    if (!authUser) {
+        return <LoginScreen />;
     }
+    if (selectedManholeId) {
+        return <Dashboard manholeId={selectedManholeId} manholeName={selectedManholeName || selectedManholeId} onBack={handleBackToSelector} onLogout={handleLogout} />;
+    }
+    return <ManholeSelector onSelectManhole={handleSelectManhole} onLogout={handleLogout} />;
   };
 
   return (

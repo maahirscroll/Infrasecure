@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { getManholeIds } from '../services/manholeService';
 import { ManholeIcon } from './icons/ManholeIcon';
 import { LogoutIcon } from './icons/LogoutIcon';
 
 interface ManholeSelectorProps {
-  onSelectManhole: (id: string) => void;
+  onSelectManhole: (id: string, name: string) => void;
   onLogout: () => void;
 }
 
@@ -33,16 +32,19 @@ const ManholeSelector: React.FC<ManholeSelectorProps> = ({ onSelectManhole, onLo
                 <div className="text-cyan-400">Loading available units...</div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {manholeIds.map(id => (
-                        <button
-                            key={id}
-                            onClick={() => onSelectManhole(id)}
-                            className="bg-gray-800 border border-gray-700 p-6 rounded-xl shadow-lg hover:bg-gray-700 hover:border-cyan-500 transition-all duration-300 transform hover:-translate-y-1 group"
-                        >
-                            <ManholeIcon className="w-16 h-16 mx-auto text-gray-500 group-hover:text-cyan-400 transition-colors duration-300" />
-                            <p className="mt-4 font-semibold text-lg text-white">{id}</p>
-                        </button>
-                    ))}
+                    {manholeIds.map((id, index) => {
+                        const displayName = index === 0 ? 'MH-370' : id;
+                        return (
+                            <button
+                                key={id}
+                                onClick={() => onSelectManhole(id, displayName)}
+                                className="bg-gray-800 border border-gray-700 p-6 rounded-xl shadow-lg hover:bg-gray-700 hover:border-cyan-500 transition-all duration-300 transform hover:-translate-y-1 group"
+                            >
+                                <ManholeIcon className="w-16 h-16 mx-auto text-gray-500 group-hover:text-cyan-400 transition-colors duration-300" />
+                                <p className="mt-4 font-semibold text-lg text-white">{displayName}</p>
+                            </button>
+                        );
+                    })}
                 </div>
             )}
 

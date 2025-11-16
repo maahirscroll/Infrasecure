@@ -1,5 +1,5 @@
 {
-  "name": "Copy of Copy of Copy of Smart Manhole Monitor",
+  "name": "Infrasecure",
   "description": "A web application to monitor real-time sensor data from smart manhole covers, including gas levels and blockage distance, and to remotely control locking mechanisms.",
   "requestFramePermissions": []
 }

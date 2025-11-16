@@ -1,82 +1,98 @@
-
+import { db } from './firebase';
+import { ref, get, set, onValue, off } from 'firebase/database';
 import type { ManholeData, SensorReading } from '../types';
 
-const MANHOLE_IDS = ['MH-NYC-101', 'MH-SF-204', 'MH-CHI-308'];
 const MAX_HISTORY = 30;
 
-// In-memory "database"
-const mockDatabase: Map<string, ManholeData> = new Map(
-  MANHOLE_IDS.map(id => [
-    id,
-    {
-      id,
-      gasLevel: 50,
-      blockageDistance: 200, // 200cm deep, no blockage
-      isLocked: true,
-      history: {
-        gas: [],
-        blockage: [],
-      },
-    },
-  ])
-);
-
-// --- Public API ---
+// In-memory cache to hold history for active subscriptions
+const historyCache: Map<string, { gas: SensorReading[]; blockage: SensorReading[] }> = new Map();
 
 export const getManholeIds = async (): Promise<string[]> => {
-  await new Promise(res => setTimeout(res, 300)); // Simulate network delay
-  return MANHOLE_IDS;
+  const manholesRef = ref(db, 'Manholes');
+  try {
+    const snapshot = await get(manholesRef);
+    if (snapshot.exists()) {
+      return Object.keys(snapshot.val()).sort();
+    }
+  } catch(error) {
+    console.error("Could not fetch manhole IDs from Firebase:", error);
+  }
+  return [];
 };
 
 export const setLockState = async (id: string, isLocked: boolean): Promise<boolean> => {
-  await new Promise(res => setTimeout(res, 700)); // Simulate network delay
-  const manhole = mockDatabase.get(id);
-  if (manhole) {
-    manhole.isLocked = isLocked;
-    mockDatabase.set(id, manhole);
+  const commandRef = ref(db, `Manholes/${id}/command`);
+  const isLockedRef = ref(db, `Manholes/${id}/isLocked`);
+  const command = isLocked ? 'LOCK' : 'UNLOCK';
+  try {
+    // Update both the command for the device and the lock state for the UI
+    await Promise.all([
+        set(commandRef, command),
+        set(isLockedRef, isLocked)
+    ]);
     return true;
+  } catch (error) {
+    console.error("Failed to send lock/unlock command:", error);
+    return false;
   }
-  return false;
 };
 
 export const subscribeToManholeUpdates = (id: string, callback: (data: ManholeData) => void): (() => void) => {
-  const update = () => {
-    const manhole = mockDatabase.get(id);
-    if (!manhole) return;
+  const manholeRef = ref(db, `Manholes/${id}`);
+  
+  // Initialize history for this subscription
+  historyCache.set(id, { gas: [], blockage: [] });
 
-    // Simulate sensor data fluctuations
-    const newGasLevel = manhole.gasLevel + (Math.random() - 0.5) * 10;
-    manhole.gasLevel = Math.max(20, Math.min(600, newGasLevel)); // Clamp values
+  const listener = onValue(manholeRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      console.warn(`No data for manhole ${id}`);
+      return;
+    }
 
-    const newBlockageDistance = manhole.blockageDistance + (Math.random() - 0.45) * 5;
-    manhole.blockageDistance = Math.max(10, Math.min(200, newBlockageDistance)); // Clamp values
+    const val = snapshot.val();
+    const sensorData = val.Sensors || { gas: 0, distance: 200, ldr: 0, manholeStatus: 'Unknown' };
+    const isLocked = val.isLocked ?? true; // Default to locked if not set
+
+    const history = historyCache.get(id);
+    if (!history) return; // Should not happen
 
     const now = Date.now();
     
-    manhole.history.gas.push({ timestamp: now, value: manhole.gasLevel });
-    if (manhole.history.gas.length > MAX_HISTORY) {
-      manhole.history.gas.shift();
+    // The Arduino sends raw ADC value for gas, and distance in cm.
+    const gasLevel = Number(sensorData.gas) || 0;
+    const blockageDistance = Number(sensorData.distance) || 200;
+
+    history.gas.push({ timestamp: now, value: gasLevel });
+    if (history.gas.length > MAX_HISTORY) {
+      history.gas.shift();
     }
 
-    manhole.history.blockage.push({ timestamp: now, value: manhole.blockageDistance });
-     if (manhole.history.blockage.length > MAX_HISTORY) {
-      manhole.history.blockage.shift();
+    history.blockage.push({ timestamp: now, value: blockageDistance });
+    if (history.blockage.length > MAX_HISTORY) {
+      history.blockage.shift();
     }
 
-    mockDatabase.set(id, manhole);
-
-    // Create a deep copy to avoid state mutation issues in React
-    const dataCopy = JSON.parse(JSON.stringify(manhole));
-    callback(dataCopy);
-  };
-
-  // Initial call
-  setTimeout(() => update(), 100);
-
-  const intervalId = setInterval(update, 2000);
+    const dataForCallback: ManholeData = {
+      id,
+      gasLevel,
+      blockageDistance,
+      isLocked,
+      ldrValue: Number(sensorData.ldr) || 0,
+      manholeStatus: sensorData.manholeStatus || 'Unknown',
+      history: {
+        gas: [...history.gas], // Create copies to prevent mutation
+        blockage: [...history.blockage],
+      },
+    };
+    
+    callback(dataForCallback);
+  }, (error) => {
+    console.error(`Firebase subscription error for ${id}:`, error);
+  });
 
   // Return unsubscribe function
   return () => {
-    clearInterval(intervalId);
+    off(manholeRef, 'value', listener);
+    historyCache.delete(id); // Clean up cache
   };
 };

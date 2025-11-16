@@ -1,8 +1,3 @@
-
-export interface User {
-  email: string;
-}
-
 export interface SensorReading {
   timestamp: number;
   value: number;
@@ -13,6 +8,8 @@ export interface ManholeData {
   gasLevel: number;
   blockageDistance: number; // in cm, from ultrasonic sensor
   isLocked: boolean;
+  ldrValue: number;
+  manholeStatus: 'Open' | 'Closed' | 'Unknown';
   history: {
     gas: SensorReading[];
     blockage: SensorReading[];
